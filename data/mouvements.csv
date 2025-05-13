@@ -1,0 +1,11 @@
+id_produit;id_entrepot;type_mouvement;quantite;date_mouvement
+P001;E01;réception;100;02/01/2024
+P001;E01;stockage;100;03/01/2024
+P001;E01;expédition;60;06/01/2024
+P002;E02;réception;50;04/01/2024
+P002;E02;expédition;50;07/01/2024
+P003;E01;réception;120;05/01/2024
+P003;E01;expédition;80;08/01/2024
+P004;E03;réception;70;06/01/2024
+P004;E03;stockage;70;07/01/2024
+P004;E03;expédition;70;10/01/2024

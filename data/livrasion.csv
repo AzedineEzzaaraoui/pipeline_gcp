@@ -1,0 +1,5 @@
+id_commande;id_client;id_produit;date_commande;date_expedition;date_livraison;quantite;statut_livraison;entrepot_source
+5001;C001;P001;01/01/2024;03/01/2024;05/01/2024;3;livré;E01
+5002;C002;P002;02/01/2024;04/01/2024;08/01/2024;1;en retard;E02
+5003;C001;P003;05/01/2024;06/01/2024;06/01/2024;5;livré;E01
+5004;C003;P004;07/01/2024;08/01/2024;12/01/2024;2;en transit;E03

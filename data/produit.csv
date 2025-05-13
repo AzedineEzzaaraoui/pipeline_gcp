@@ -1,0 +1,6 @@
+id_produit,nom_produit,categorie,prix_unitaire,disponible,created_date
+P001,Crème hydratante,Soins,19.99,true,2023-12-01
+P002,Shampooing doux,Cheveux,12.49,true,2023-12-03
+P003,Parfum jasmin,Parfums,45.00,false,2023-11-25
+P004,Déodorant spray,Hygiène,8.75,true,2024-01-10
+P005,Crème solaire SPF 50,Soins,22.99,true,2023-12-15

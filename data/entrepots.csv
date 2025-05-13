@@ -1,0 +1,5 @@
+id_entrepot,nom_entrepot,ville,pays,capacite_max,date_ouverture
+E01,Entrepot Nord,Lille,France,5000,2020-01-01
+E02,Entrepot Sud,Marseille,France,7000,2021-03-15
+E03,Entrepot Est,Strasbourg,France,6000,2019-07-01
+E04,Entrepot Ouest,Nantes,France,5500,2022-09-01
