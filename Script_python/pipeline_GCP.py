@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 
 def load_csv_files(base_path):
     """Load CSV files from specified directory"""
-    df_product = pd.read_csv(f"{base_path}\\produit.csv")
-    df_entrepots = pd.read_csv(f"{base_path}\\entrepots.csv")
-    df_commandes = pd.read_csv(f"{base_path}\\commandes.csv")
-    df_livrasion = pd.read_csv(f"{base_path}\\livrasion.csv", sep=';')
-    df_mouvements = pd.read_csv(f"{base_path}\\mouvements.csv", sep=';')  
+    df_product = pd.read_csv(os.path.join(base_path, 'produit.csv'))
+    df_entrepots = pd.read_csv(os.path.join(base_path, 'entrepots.csv'))
+    df_commandes = pd.read_csv(os.path.join(base_path, 'commandes.csv'))
+    df_livrasion = pd.read_csv(os.path.join(base_path, 'livrasion.csv'), sep=';')
+    df_mouvements = pd.read_csv(os.path.join(base_path, 'mouvements.csv'), sep=';')
+    return df_product, df_entrepots, df_commandes, df_livrasion, df_mouvements 
     return df_product, df_entrepots, df_commandes, df_livrasion, df_mouvements
 
 def transformation_df(df):
