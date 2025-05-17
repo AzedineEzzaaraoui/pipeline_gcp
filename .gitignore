@@ -1,0 +1,17 @@
+# Fichiers sensibles
+.env
+credential_path/
+.ipynb_checkpoints/
+
+# Fichiers temporaires/data
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.vscode/
+*.sqlite3
+*.log
+*.ipynb_checkpoints
