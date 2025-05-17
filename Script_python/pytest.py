@@ -1,12 +1,7 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[23]:
-
 
 from datetime import date
 
-get_ipython().run_line_magic('run', './pipeline_GCP.ipynb')
+%run ./pipeline_GCP.ipynb
 
 def test_transformation_df():
     
@@ -122,10 +117,3 @@ def main():
 
 if __name__ == "__main__" :
     main()
-
-
-# In[ ]:
-
-
-
-

@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[23]:
-
-
 import pandas as pd
 import logging
 import pyodbc
@@ -195,8 +189,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
