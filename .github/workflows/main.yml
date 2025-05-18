@@ -11,24 +11,11 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       
-    - name: Debug environment
+    - name: Fix pip and install dependencies
       run: |
-        dir
-        echo %CD%
-        where python
-        python --version
-        pip --version
-      shell: cmd
-      continue-on-error: true
-      
-    - name: Install dependencies
-      run: |
-        if exist requirements.txt (
-          pip install -r requirements.txt
-        ) else (
-          echo "requirements.txt not found"
-          dir
-        )
+        python -m ensurepip --upgrade || echo "Ensurepip failed, trying alternative method"
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
       shell: cmd
       
     - name: Configure Google Cloud credentials
