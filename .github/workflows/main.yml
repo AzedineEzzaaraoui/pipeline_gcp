@@ -35,23 +35,30 @@ jobs:
         echo DATA_BASE_PATH=./data >> %GITHUB_ENV%
       shell: cmd
       
-    - name: Check data directory
+    - name: Fix script path issue
       run: |
-        echo "Checking data directory content:"
-        dir data
-      shell: cmd
-      continue-on-error: true
-      
-    - name: Create data directory structure
-      run: |
-        if not exist data\produit.csv (
-          echo "Creating sample data files..."
-          echo "id,nom,prix,categorie" > data\produit.csv
-          echo "id,adresse,ville" > data\entrepots.csv
-          echo "id,date,client_id,statut" > data\commandes.csv
-          echo "id,commande_id,date,statut" > data\livraison.csv
-          echo "id,produit_id,entrepot_id,quantite,type,date" > data\mouvements.csv
-        )
+        echo "Fixing path issue in pipeline_GCP.py"
+        python -c "
+        import os
+        filename = 'Script_python/pipeline_GCP.py'
+        with open(filename, 'r', encoding='utf-8') as file:
+            content = file.read()
+        
+        # Fix the path with space issue
+        if './data ' in content:
+            content = content.replace('./data ', './data')
+        
+        # Alternative fix if the above doesn't work
+        if 'DATA_BASE_PATH' in os.environ:
+            content = content.replace('base_path = \'./data\'', 'base_path = os.environ[\'DATA_BASE_PATH\']')
+            content = content.replace('base_path = \'./data \'', 'base_path = os.environ[\'DATA_BASE_PATH\']')
+            content = content.replace('base_path = \"./data\"', 'base_path = os.environ[\'DATA_BASE_PATH\']')
+            content = content.replace('base_path = \"./data \"', 'base_path = os.environ[\'DATA_BASE_PATH\']')
+        
+        with open(filename, 'w', encoding='utf-8') as file:
+            file.write(content)
+        print('Script updated successfully')
+        "
       shell: cmd
       
     - name: Run ETL pipeline
