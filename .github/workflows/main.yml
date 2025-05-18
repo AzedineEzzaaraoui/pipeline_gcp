@@ -7,43 +7,48 @@ on:
 
 jobs:
   etl_pipeline:
-    runs-on: self-hosted  # Utilisation du runner local au lieu de ubuntu-22.04
+    runs-on: self-hosted  # Utilisation du runner local
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    
+
     - name: Set up Python
+      shell: pwsh
       run: |
-        # Vérification si Python est déjà installé sur le runner local
-        python --version || echo "Python needs to be installed on the self-hosted runner"
-        # Sur Windows, pip est généralement déjà disponible avec Python
-    
+        try {
+          python --version
+        } catch {
+          Write-Output "Python is not installed on the self-hosted runner"
+          exit 1
+        }
+
     - name: Install dependencies
+      shell: pwsh
       run: |
         pip install -r requirements.txt
-        # Pas besoin d'installer les drivers ODBC car nous sommes sur la machine Windows
-        # où SQL Server est déjà installé et configuré
-    
+
     - name: Configure Google Cloud credentials
       uses: google-github-actions/auth@v1
       with:
         credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-    
+
     - name: Set up environment variables
+      shell: pwsh
       run: |
-        # Définition des variables d'environnement pour Windows (PowerShell)
-        echo "SQL_SERVER=localhost,1433" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "SQL_USERNAME=${{ secrets.SQL_USERNAME }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "SQL_DRIVER=${{ secrets.SQL_DRIVER }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "DATA_BASE_PATH=./data" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-    
+        "SQL_SERVER=localhost,1433" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "SQL_USERNAME=${{ secrets.SQL_USERNAME }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "SQL_DRIVER=${{ secrets.SQL_DRIVER }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "DATA_BASE_PATH=./data" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
     - name: Run ETL pipeline
+      shell: pwsh
       run: python Script_python/pipeline_GCP.py
-    
+
     - name: Run tests
+      shell: pwsh
       run: python Script_python/pytest.py
