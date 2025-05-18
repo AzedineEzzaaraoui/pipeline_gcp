@@ -13,8 +13,8 @@ jobs:
       
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt || pip3 install -r requirements.txt
-      shell: bash
+        pip install -r requirements.txt
+      shell: cmd
       
     - name: Configure Google Cloud credentials
       uses: google-github-actions/auth@v1
@@ -23,20 +23,20 @@ jobs:
         
     - name: Set up environment variables
       run: |
-        echo "SQL_SERVER=localhost,1433" >> $GITHUB_ENV
-        echo "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" >> $GITHUB_ENV
-        echo "SQL_USERNAME=${{ secrets.SQL_USERNAME }}" >> $GITHUB_ENV
-        echo "SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}" >> $GITHUB_ENV
-        echo "SQL_DRIVER=${{ secrets.SQL_DRIVER }}" >> $GITHUB_ENV
-        echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
-        echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $GITHUB_ENV
-        echo "DATA_BASE_PATH=./data" >> $GITHUB_ENV
-      shell: bash
+        echo SQL_SERVER=localhost,1433 >> %GITHUB_ENV%
+        echo SQL_DATABASE=${{ secrets.SQL_DATABASE }} >> %GITHUB_ENV%
+        echo SQL_USERNAME=${{ secrets.SQL_USERNAME }} >> %GITHUB_ENV%
+        echo SQL_PASSWORD=${{ secrets.SQL_PASSWORD }} >> %GITHUB_ENV%
+        echo SQL_DRIVER=${{ secrets.SQL_DRIVER }} >> %GITHUB_ENV%
+        echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> %GITHUB_ENV%
+        echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> %GITHUB_ENV%
+        echo DATA_BASE_PATH=./data >> %GITHUB_ENV%
+      shell: cmd
       
     - name: Run ETL pipeline
-      run: python Script_python/pipeline_GCP.py || python3 Script_python/pipeline_GCP.py
-      shell: bash
+      run: python Script_python/pipeline_GCP.py
+      shell: cmd
       
     - name: Run tests
-      run: python Script_python/pytest.py || python3 Script_python/pytest.py
-      shell: bash
+      run: python Script_python/pytest.py
+      shell: cmd
