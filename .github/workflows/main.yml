@@ -34,7 +34,7 @@ jobs:
         echo SQL_DRIVER=${{ secrets.SQL_DRIVER }} >> %GITHUB_ENV%
         echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> %GITHUB_ENV%
         echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> %GITHUB_ENV%
-        echo DATA_BASE_PATH=./data >> %GITHUB_ENV%
+        echo DATA_BASE_PATH=./data>>%GITHUB_ENV%
       shell: cmd
 
     - name: Fix script path issue
