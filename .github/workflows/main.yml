@@ -11,9 +11,24 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       
+    - name: Debug environment
+      run: |
+        dir
+        echo %CD%
+        where python
+        python --version
+        pip --version
+      shell: cmd
+      continue-on-error: true
+      
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
+        if exist requirements.txt (
+          pip install -r requirements.txt
+        ) else (
+          echo "requirements.txt not found"
+          dir
+        )
       shell: cmd
       
     - name: Configure Google Cloud credentials
