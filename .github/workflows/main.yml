@@ -35,6 +35,25 @@ jobs:
         echo DATA_BASE_PATH=./data >> %GITHUB_ENV%
       shell: cmd
       
+    - name: Check data directory
+      run: |
+        echo "Checking data directory content:"
+        dir data
+      shell: cmd
+      continue-on-error: true
+      
+    - name: Create data directory structure
+      run: |
+        if not exist data\produit.csv (
+          echo "Creating sample data files..."
+          echo "id,nom,prix,categorie" > data\produit.csv
+          echo "id,adresse,ville" > data\entrepots.csv
+          echo "id,date,client_id,statut" > data\commandes.csv
+          echo "id,commande_id,date,statut" > data\livraison.csv
+          echo "id,produit_id,entrepot_id,quantite,type,date" > data\mouvements.csv
+        )
+      shell: cmd
+      
     - name: Run ETL pipeline
       run: python Script_python/pipeline_GCP.py
       shell: cmd
