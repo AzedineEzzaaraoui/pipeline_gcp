@@ -11,11 +11,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       
-    - name: Check Python
-      run: python3 --version || python --version
-      shell: bash
-      continue-on-error: true
-      
     - name: Install dependencies
       run: |
         pip install -r requirements.txt || pip3 install -r requirements.txt
