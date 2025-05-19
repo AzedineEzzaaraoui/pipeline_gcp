@@ -1,0 +1,151 @@
+name: SQL Server to BigQuery Pipeline
+
+on:
+  schedule:
+    - cron: '0 1 * * *' # Exécuter tous les jours à 1h du matin
+  workflow_dispatch: # Lancer manuellement
+
+jobs:
+  etl_pipeline:
+    runs-on: self-hosted # Utilise un runner local
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Fix pip and install dependencies
+        run: |
+          python -m ensurepip --upgrade || echo "Ensurepip failed, trying alternative method"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+        shell: cmd
+      
+      # Étape importante: Installation du pilote ODBC pour SQL Server
+      - name: Install ODBC Driver for SQL Server
+        run: |
+          @echo off
+          echo Checking for ODBC Driver installation...
+          powershell -Command "Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' 2>$null | Format-List"
+          
+          echo Installing SQL Server ODBC Driver if needed...
+          powershell -Command "if (-not (Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' -Name 'ODBC Driver 17 for SQL Server' -ErrorAction SilentlyContinue)) { 
+            Write-Host 'Driver not found. Need to install.'
+            # Si le runner a accès à Internet, vous pouvez télécharger le driver
+            # Sinon, vous devriez le placer dans votre repo et l'installer depuis là
+            # $ProgressPreference = 'SilentlyContinue'
+            # Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2202930' -OutFile 'msodbcsql.msi'
+            # Start-Process msiexec.exe -Wait -ArgumentList '/i msodbcsql.msi /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES'
+          } else {
+            Write-Host 'ODBC Driver 17 for SQL Server is already installed.'
+          }"
+        shell: cmd
+      
+      - name: Configure Google Cloud credentials
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+      
+      - name: Set up environment variables
+        run: |
+          echo SQL_SERVER=${{ secrets.SQL_SERVER }} >> %GITHUB_ENV%
+          echo SQL_DATABASE=${{ secrets.SQL_DATABASE }} >> %GITHUB_ENV%
+          echo SQL_USERNAME=${{ secrets.SQL_USERNAME }} >> %GITHUB_ENV%
+          echo SQL_PASSWORD=${{ secrets.SQL_PASSWORD }} >> %GITHUB_ENV%
+          echo SQL_DRIVER=ODBC Driver 17 for SQL Server >> %GITHUB_ENV%
+          echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> %GITHUB_ENV%
+          echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> %GITHUB_ENV%
+          echo DATA_BASE_PATH=./data >> %GITHUB_ENV%
+          echo GOOGLE_APPLICATION_CREDENTIALS=%CD%\gcp-credentials.json >> %GITHUB_ENV%
+        shell: cmd
+      
+      - name: Create credentials file
+        run: |
+          echo ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }} > gcp-credentials.json
+        shell: cmd
+      
+      - name: Modify connection string in pipeline script
+        run: |
+          import os
+          import re
+          
+          print("Modifying connection string in pipeline_GCP.py")
+          filename = 'Script_python/pipeline_GCP.py'
+          
+          with open(filename, 'r', encoding='utf-8') as file:
+              content = file.read()
+          
+          # Modifier la fonction create_connection pour plus de robustesse
+          conn_func = '''def create_connection():
+              """Create a direct pyodbc connection using environment variables"""
+              try:
+                  server_name = os.getenv('SQL_SERVER')
+                  if '\\\\' in server_name:
+                      server_name = server_name.replace('\\\\', '\\')
+                  
+                  # Afficher les informations de connexion pour le débogage
+                  print(f"Attempting to connect to: {server_name}")
+                  print(f"Using driver: {os.getenv('SQL_DRIVER')}")
+                  print(f"Database: {os.getenv('SQL_DATABASE')}")
+                  
+                  conn_str = (
+                      f"DRIVER={{{os.getenv('SQL_DRIVER')}}};"
+                      f"SERVER={server_name};"
+                      f"DATABASE={os.getenv('SQL_DATABASE')};"
+                      f"UID={os.getenv('SQL_USERNAME')};"
+                      f"PWD={os.getenv('SQL_PASSWORD')};"
+                      f"TrustServerCertificate=yes;"
+                  )
+                  
+                  # Pour le débogage
+                  print(f"Connection string: {conn_str.replace(os.getenv('SQL_PASSWORD'), '********')}")
+                  
+                  return pyodbc.connect(conn_str)
+              except Exception as e:
+                  logger.error(f"Error creating connection: {str(e)}")
+                  # Liste des pilotes disponibles pour aider au débogage
+                  logger.info("Available ODBC drivers:")
+                  for driver in pyodbc.drivers():
+                      logger.info(f"  - {driver}")
+                  raise
+          '''
+          
+          # Remplacer l'ancienne fonction par la nouvelle
+          pattern = r"def create_connection\(\):.*?return pyodbc\.connect\(conn_str\)"
+          content = re.sub(pattern, conn_func, content, flags=re.DOTALL)
+          
+          # Mettre à jour le chemin du fichier de données
+          if 'DATA_BASE_PATH' in os.environ:
+              content = content.replace("base_path = './data'", "base_path = os.environ['DATA_BASE_PATH']")
+              content = content.replace("base_path = './data '", "base_path = os.environ['DATA_BASE_PATH']")
+              content = content.replace('base_path = "./data"', "base_path = os.environ['DATA_BASE_PATH']")
+              content = content.replace('base_path = "./data "', "base_path = os.environ['DATA_BASE_PATH']")
+          
+          with open(filename, 'w', encoding='utf-8') as file:
+              file.write(content)
+          
+          print("Script updated successfully.")
+        shell: python
+      
+      - name: Debug environment
+        run: |
+          echo "Current directory: %CD%"
+          dir
+          dir data
+          echo "Checking environment variables:"
+          echo SQL_SERVER=%SQL_SERVER%
+          echo SQL_DATABASE=%SQL_DATABASE%
+          echo SQL_DRIVER=%SQL_DRIVER%
+          echo DATA_BASE_PATH=%DATA_BASE_PATH%
+          echo GCP_PROJECT_ID=%GCP_PROJECT_ID%
+          echo BQ_DATASET_ID=%BQ_DATASET_ID%
+          
+          echo "ODBC Drivers installed:"
+          powershell -Command "Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' 2>$null | Format-List"
+        shell: cmd
+      
+      - name: Run ETL pipeline
+        run: python Script_python/pipeline_GCP.py
+        shell: cmd
+      
+      - name: Run tests
+        run: python Script_python/pytest.py
+        shell: cmd
