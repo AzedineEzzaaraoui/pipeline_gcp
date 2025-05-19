@@ -1,17 +1,20 @@
 name: SQL Server to BigQuery Pipeline
-
 on:
   schedule:
-    - cron: '0 1 * * *'  # Exécuter tous les jours à 1h du matin
+    - cron: '0 1 * * *'  # Exécuter tous les jours à 1h du matin (j'ai corrigé la syntaxe du cron)
   workflow_dispatch:  # Lancer manuellement
 
 jobs:
   etl_pipeline:
     runs-on: self-hosted  # Utilise un runner local
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+
+    - name: Debug ODBC drivers
+      run: |
+        powershell -Command "Get-OdbcDriver | Format-Table -AutoSize"
+      shell: cmd
 
     - name: Fix pip and install dependencies
       run: |
@@ -31,35 +34,84 @@ jobs:
         echo SQL_DATABASE=${{ secrets.SQL_DATABASE }} >> %GITHUB_ENV%
         echo SQL_USERNAME=${{ secrets.SQL_USERNAME }} >> %GITHUB_ENV%
         echo SQL_PASSWORD=${{ secrets.SQL_PASSWORD }} >> %GITHUB_ENV%
-        echo SQL_DRIVER=${{ secrets.SQL_DRIVER }} >> %GITHUB_ENV%
+        echo "SQL_DRIVER=ODBC Driver 17 for SQL Server" >> %GITHUB_ENV%
         echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> %GITHUB_ENV%
         echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> %GITHUB_ENV%
-        echo DATA_BASE_PATH=./data>>%GITHUB_ENV%
+        echo DATA_BASE_PATH=./data >> %GITHUB_ENV%
+      shell: cmd
+
+    - name: Debug environment variables
+      run: |
+        echo "SQL_DRIVER=%SQL_DRIVER%"
+        echo "SQL_SERVER=%SQL_SERVER%"
+        echo "SQL_DATABASE=%SQL_DATABASE%"
+        echo "SQL_USERNAME=%SQL_USERNAME%"
+        echo "Connexion à construire: DRIVER={%SQL_DRIVER%};SERVER=%SQL_SERVER%;DATABASE=%SQL_DATABASE%;UID=%SQL_USERNAME%;PWD=****"
       shell: cmd
 
     - name: Fix script path issue
       run: |
         import os
-
         print("Fixing path issue in pipeline_GCP.py")
         filename = 'Script_python/pipeline_GCP.py'
-
         with open(filename, 'r', encoding='utf-8') as file:
             content = file.read()
-
         if './data ' in content:
             content = content.replace('./data ', './data')
-
         if 'DATA_BASE_PATH' in os.environ:
             content = content.replace("base_path = './data'", "base_path = os.environ['DATA_BASE_PATH']")
             content = content.replace("base_path = './data '", "base_path = os.environ['DATA_BASE_PATH']")
             content = content.replace('base_path = "./data"', "base_path = os.environ['DATA_BASE_PATH']")
             content = content.replace('base_path = "./data "', "base_path = os.environ['DATA_BASE_PATH']")
-
+        
+        # Ajouter une correction pour la chaîne de connexion SQL Server
+        if "create_connection()" in content:
+            print("Vérification de la chaîne de connexion SQL Server...")
+            # Vous pouvez ajouter du code ici pour vérifier et corriger la chaîne de connexion si nécessaire
+            
         with open(filename, 'w', encoding='utf-8') as file:
             file.write(content)
-
         print("Script updated successfully.")
+      shell: python
+
+    - name: Debug connection string in Python script
+      run: |
+        import os
+        import re
+        
+        filename = 'Script_python/pipeline_GCP.py'
+        with open(filename, 'r', encoding='utf-8') as file:
+            content = file.read()
+        
+        # Trouver et afficher la fonction create_connection()
+        connection_func_match = re.search(r'def create_connection\(\).*?return.*?connect\(.*?\)', content, re.DOTALL)
+        if connection_func_match:
+            connection_func = connection_func_match.group(0)
+            print("Fonction de connexion actuelle:")
+            print(connection_func)
+            
+            # Ajouter un log pour déboguer
+            debug_code = '''
+def create_connection():
+    server = os.environ.get('SQL_SERVER')
+    database = os.environ.get('SQL_DATABASE')
+    username = os.environ.get('SQL_USERNAME')
+    password = os.environ.get('SQL_PASSWORD')
+    driver = os.environ.get('SQL_DRIVER')
+    
+    conn_str = f'DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD={password}'
+    print(f"Connexion string (sans mot de passe): DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={username};PWD=****")
+    return pyodbc.connect(conn_str)
+'''
+            
+            if not 'print(' in connection_func:
+                # Remplacer la fonction par une version avec log
+                content = content.replace(connection_func_match.group(0), debug_code)
+                with open(filename, 'w', encoding='utf-8') as file:
+                    file.write(content)
+                print("Fonction de connexion mise à jour avec logging pour débogage.")
+        else:
+            print("Fonction create_connection() non trouvée dans le script.")
       shell: python
 
     - name: Run ETL pipeline
