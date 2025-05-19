@@ -6,40 +6,86 @@ on:
 
 jobs:
   etl_pipeline:
-    runs-on: self-hosted  # Runner auto-hébergé
-    
+    runs-on: self-hosted  # Utilise un runner local
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'  # Version spécifique
-
-    - name: Install dependencies
+    - name: Fix pip and install dependencies
       run: |
+        python -m ensurepip --upgrade || echo "Ensurepip failed, trying alternative method"
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        python -m pip install -r requirements.txt
+      shell: cmd
 
     - name: Configure Google Cloud credentials
       uses: google-github-actions/auth@v1
       with:
-        credentials_json: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+        credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
     - name: Set up environment variables
       run: |
-        echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" >> $GITHUB_ENV
-        echo "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" >> $GITHUB_ENV
-        echo "SQL_USERNAME=${{ secrets.SQL_USERNAME }}" >> $GITHUB_ENV
-        echo "SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}" >> $GITHUB_ENV
-        echo "SQL_DRIVER=ODBC Driver 17 for SQL Server" >> $GITHUB_ENV
-        echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
-        echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $GITHUB_ENV
-        echo "DATA_BASE_PATH=./data" >> $GITHUB_ENV
+        echo SQL_SERVER=localhost,1433 >> %GITHUB_ENV%
+        echo SQL_DATABASE=${{ secrets.SQL_DATABASE }} >> %GITHUB_ENV%
+        echo SQL_USERNAME=${{ secrets.SQL_USERNAME }} >> %GITHUB_ENV%
+        echo SQL_PASSWORD=${{ secrets.SQL_PASSWORD }} >> %GITHUB_ENV%
+        echo SQL_DRIVER=${{ secrets.SQL_DRIVER }} >> %GITHUB_ENV%
+        echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> %GITHUB_ENV%
+        echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> %GITHUB_ENV%
+        echo DATA_BASE_PATH=./data>>%GITHUB_ENV%
+      shell: cmd
+
+    - name: Fix script path issue
+      run: |
+        import os
+        print("Fixing path issue in pipeline_GCP.py")
+        filename = 'Script_python/pipeline_GCP.py'
+        with open(filename, 'r', encoding='utf-8') as file:
+            content = file.read()
+        if './data ' in content:
+            content = content.replace('./data ', './data')
+        if 'DATA_BASE_PATH' in os.environ:
+            content = content.replace("base_path = './data'", "base_path = os.environ['DATA_BASE_PATH']")
+            content = content.replace("base_path = './data '", "base_path = os.environ['DATA_BASE_PATH']")
+            content = content.replace('base_path = "./data"', "base_path = os.environ['DATA_BASE_PATH']")
+            content = content.replace('base_path = "./data "', "base_path = os.environ['DATA_BASE_PATH']")
+        with open(filename, 'w', encoding='utf-8') as file:
+            file.write(content)
+        print("Script updated successfully.")
+      shell: python
+
+    ### DEBUG — Afficher les drivers ODBC installés
+    - name: List available ODBC drivers
+      run: |
+        powershell -Command "Get-OdbcDriver | Format-Table Name, Platform"
+
+    ### DEBUG — Afficher les variables de connexion (hors mot de passe)
+    - name: Display connection environment variables
+      run: |
+        echo SQL_DRIVER=%SQL_DRIVER%
+        echo SQL_SERVER=%SQL_SERVER%
+        echo SQL_DATABASE=%SQL_DATABASE%
+        echo SQL_USERNAME=%SQL_USERNAME%
+      shell: cmd
+
+    ### DEBUG — Afficher la chaîne de connexion (sans mot de passe)
+    - name: Show connection string (masked password)
+      run: |
+        import os
+        conn_str = (
+            f'DRIVER={{{os.getenv("SQL_DRIVER")}}};'
+            f'SERVER={os.getenv("SQL_SERVER")};'
+            f'DATABASE={os.getenv("SQL_DATABASE")};'
+            f'UID={os.getenv("SQL_USERNAME")};'
+            f'PWD=***hidden***'
+        )
+        print('Connection string:', conn_str)
+      shell: python
 
     - name: Run ETL pipeline
       run: python Script_python/pipeline_GCP.py
+      shell: cmd
 
     - name: Run tests
-      run: python -m pytest Script_python/tests/
+      run: python Script_python/pytest.py
+      shell: cmd
