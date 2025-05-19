@@ -2,12 +2,12 @@ name: SQL Server to BigQuery Pipeline
 
 on:
   schedule:
-    - cron: '0 1 * * *' # Exécuter tous les jours à 1h du matin
-  workflow_dispatch: # Lancer manuellement
+    - cron: '0 1 * * *'   # Tous les jours à 1h du matin
+  workflow_dispatch:      # Possibilité de lancer manuellement
 
 jobs:
   etl_pipeline:
-    runs-on: self-hosted # Utilise un runner local
+    runs-on: self-hosted
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -19,22 +19,20 @@ jobs:
           python -m pip install -r requirements.txt
         shell: cmd
 
-      - name: Check and install ODBC Driver for SQL Server if needed
+      - name: Check and Install ODBC Driver for SQL Server if needed
         shell: powershell
         run: |
-          Write-Host "Checking for ODBC Driver installation..."
+          $driverName = 'ODBC Driver 17 for SQL Server'
           $drivers = Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' -ErrorAction SilentlyContinue
           if ($drivers.'ODBC Driver 17 for SQL Server') {
-            Write-Host "ODBC Driver 17 for SQL Server is already installed."
+            Write-Host "$driverName is already installed."
           } else {
-            Write-Host "ODBC Driver 17 for SQL Server not found. Installing..."
-            # Exemple de téléchargement et installation silencieuse (adapter si besoin)
-            $url = 'https://go.microsoft.com/fwlink/?linkid=2202930'
-            $msi = 'msodbcsql.msi'
-            Invoke-WebRequest -Uri $url -OutFile $msi
-            Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES" -Wait
-            Remove-Item $msi
-            Write-Host "Installation terminée."
+            Write-Host "$driverName not found. Installation required."
+            # Décommentez les lignes suivantes si le runner a accès à Internet pour télécharger et installer automatiquement
+            # Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2202930' -OutFile 'msodbcsql.msi'
+            # Start-Process msiexec.exe -Wait -ArgumentList '/i msodbcsql.msi /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES'
+            Write-Host "Veuillez installer manuellement le driver ODBC SQL Server sur le runner."
+            exit 1
           }
 
       - name: Configure Google Cloud credentials
@@ -44,21 +42,21 @@ jobs:
 
       - name: Set up environment variables
         run: |
-          echo SQL_SERVER=${{ secrets.SQL_SERVER }} >> $Env:GITHUB_ENV
-          echo SQL_DATABASE=${{ secrets.SQL_DATABASE }} >> $Env:GITHUB_ENV
-          echo SQL_USERNAME=${{ secrets.SQL_USERNAME }} >> $Env:GITHUB_ENV
-          echo SQL_PASSWORD=${{ secrets.SQL_PASSWORD }} >> $Env:GITHUB_ENV
-          echo SQL_DRIVER=ODBC Driver 17 for SQL Server >> $Env:GITHUB_ENV
-          echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> $Env:GITHUB_ENV
-          echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> $Env:GITHUB_ENV
-          echo DATA_BASE_PATH=./data >> $Env:GITHUB_ENV
-          echo GOOGLE_APPLICATION_CREDENTIALS=%CD%\gcp-credentials.json >> $Env:GITHUB_ENV
+          echo SQL_SERVER=${{ secrets.SQL_SERVER }} >> $env:GITHUB_ENV
+          echo SQL_DATABASE=${{ secrets.SQL_DATABASE }} >> $env:GITHUB_ENV
+          echo SQL_USERNAME=${{ secrets.SQL_USERNAME }} >> $env:GITHUB_ENV
+          echo SQL_PASSWORD=${{ secrets.SQL_PASSWORD }} >> $env:GITHUB_ENV
+          echo SQL_DRIVER=ODBC Driver 17 for SQL Server >> $env:GITHUB_ENV
+          echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> $env:GITHUB_ENV
+          echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> $env:GITHUB_ENV
+          echo DATA_BASE_PATH=./data >> $env:GITHUB_ENV
+          echo GOOGLE_APPLICATION_CREDENTIALS=%CD%\gcp-credentials.json >> $env:GITHUB_ENV
         shell: powershell
 
       - name: Create credentials file
         run: |
           $creds = '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
-          Set-Content -Path gcp-credentials.json -Value $creds
+          $creds | Out-File -Encoding utf8 gcp-credentials.json
         shell: powershell
 
       - name: Modify connection string in pipeline script
@@ -66,7 +64,6 @@ jobs:
           import os
           import re
 
-          print("Modifying connection string in pipeline_GCP.py")
           filename = 'Script_python/pipeline_GCP.py'
 
           with open(filename, 'r', encoding='utf-8') as file:
@@ -91,11 +88,16 @@ jobs:
                       f"PWD={os.getenv('SQL_PASSWORD')};"
                       f"TrustServerCertificate=yes;"
                   )
+
                   print(f"Connection string: {conn_str.replace(os.getenv('SQL_PASSWORD'), '********')}")
+                  import pyodbc
                   return pyodbc.connect(conn_str)
               except Exception as e:
+                  import logging
+                  logger = logging.getLogger(__name__)
                   logger.error(f"Error creating connection: {str(e)}")
                   logger.info("Available ODBC drivers:")
+                  import pyodbc
                   for driver in pyodbc.drivers():
                       logger.info(f"  - {driver}")
                   raise
@@ -118,20 +120,20 @@ jobs:
 
       - name: Debug environment
         run: |
-          echo "Current directory: $PWD"
-          ls
-          ls data
+          echo "Current directory: %CD%"
+          dir
+          dir data
           echo "Checking environment variables:"
-          echo "SQL_SERVER=$env:SQL_SERVER"
-          echo "SQL_DATABASE=$env:SQL_DATABASE"
-          echo "SQL_DRIVER=$env:SQL_DRIVER"
-          echo "DATA_BASE_PATH=$env:DATA_BASE_PATH"
-          echo "GCP_PROJECT_ID=$env:GCP_PROJECT_ID"
-          echo "BQ_DATASET_ID=$env:BQ_DATASET_ID"
+          echo SQL_SERVER=%SQL_SERVER%
+          echo SQL_DATABASE=%SQL_DATABASE%
+          echo SQL_DRIVER=%SQL_DRIVER%
+          echo DATA_BASE_PATH=%DATA_BASE_PATH%
+          echo GCP_PROJECT_ID=%GCP_PROJECT_ID%
+          echo BQ_DATASET_ID=%BQ_DATASET_ID%
 
-          Write-Host "ODBC Drivers installed:"
-          Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' 2>$null | Format-List
-        shell: powershell
+          echo "ODBC Drivers installed:"
+          powershell -Command "Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' 2>$null | Format-List"
+        shell: cmd
 
       - name: Run ETL pipeline
         run: python Script_python/pipeline_GCP.py
