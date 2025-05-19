@@ -2,7 +2,7 @@ name: SQL Server to BigQuery Pipeline
 on:
   schedule:
     - cron: '0 1 * * *'  # Exécuter tous les jours à 1h du matin (j'ai corrigé la syntaxe du cron)
-  workflow_dispatch:  # Lancer manuellement
+
 
 jobs:
   etl_pipeline:
