@@ -1,56 +1,45 @@
 name: SQL Server to BigQuery Pipeline
 on:
   schedule:
-    - cron: '0 1 * **'  # Exécuter tous les jours à 1h du matin
+    - cron: '0 1 * * *'  # Exécuter tous les jours à 1h du matin
   workflow_dispatch:  # Lancer manuellement
+
 jobs:
   etl_pipeline:
-    runs-on: self-hosted  # Utilise un runner local
+    runs-on: self-hosted  # Runner auto-hébergé
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    - name: Fix pip and install dependencies
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'  # Version spécifique
+
+    - name: Install dependencies
       run: |
-        python -m ensurepip --upgrade || echo "Ensurepip failed, trying alternative method"
         python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
-      shell: cmd
+        pip install -r requirements.txt
+
     - name: Configure Google Cloud credentials
       uses: google-github-actions/auth@v1
       with:
-        credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        credentials_json: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+
     - name: Set up environment variables
       run: |
-        echo SQL_SERVER=localhost,1433 >> %GITHUB_ENV%
-        echo SQL_DATABASE=${{ secrets.SQL_DATABASE }} >> %GITHUB_ENV%
-        echo SQL_USERNAME=${{ secrets.SQL_USERNAME }} >> %GITHUB_ENV%
-        echo SQL_PASSWORD=${{ secrets.SQL_PASSWORD }} >> %GITHUB_ENV%
-        echo SQL_DRIVER=ODBC Driver 17 for SQL Server >> %GITHUB_ENV%  # Assurez-vous que ce pilote est installé
-        echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> %GITHUB_ENV%
-        echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> %GITHUB_ENV%
-        echo DATA_BASE_PATH=./data>>%GITHUB_ENV%
-      shell: cmd
-    - name: Fix script path issue
-      run: |
-        import os
-        print("Fixing path issue in pipeline_GCP.py")
-        filename = 'Script_python/pipeline_GCP.py'
-        with open(filename, 'r', encoding='utf-8') as file:
-            content = file.read()
-        if './data ' in content:
-            content = content.replace('./data ', './data')
-        if 'DATA_BASE_PATH' in os.environ:
-            content = content.replace("base_path = './data'", "base_path = os.environ['DATA_BASE_PATH']")
-            content = content.replace("base_path = './data '", "base_path = os.environ['DATA_BASE_PATH']")
-            content = content.replace('base_path = "./data"', "base_path = os.environ['DATA_BASE_PATH']")
-            content = content.replace('base_path = "./data "', "base_path = os.environ['DATA_BASE_PATH']")
-        with open(filename, 'w', encoding='utf-8') as file:
-            file.write(content)
-        print("Script updated successfully.")
-      shell: python
+        echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" >> $GITHUB_ENV
+        echo "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" >> $GITHUB_ENV
+        echo "SQL_USERNAME=${{ secrets.SQL_USERNAME }}" >> $GITHUB_ENV
+        echo "SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}" >> $GITHUB_ENV
+        echo "SQL_DRIVER=ODBC Driver 17 for SQL Server" >> $GITHUB_ENV
+        echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+        echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $GITHUB_ENV
+        echo "DATA_BASE_PATH=./data" >> $GITHUB_ENV
+
     - name: Run ETL pipeline
       run: python Script_python/pipeline_GCP.py
-      shell: cmd
+
     - name: Run tests
-      run: python Script_python/pytest.py
-      shell: cmd
+      run: python -m pytest Script_python/tests/
