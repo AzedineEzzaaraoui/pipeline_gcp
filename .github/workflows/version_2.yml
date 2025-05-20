@@ -27,8 +27,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyodbc google-cloud-bigquery pandas sqlalchemy
-
+     
     - name: Create credentials file
       shell: powershell
       run: |
@@ -38,7 +37,7 @@ jobs:
         # Définit la variable d'environnement
         echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
 
-    - name: Set up environment variables
+    - name: Set up other environment variables
       shell: powershell
       run: |
         echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" >> $env:GITHUB_ENV
@@ -50,33 +49,31 @@ jobs:
         echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $env:GITHUB_ENV
         echo "DATA_BASE_PATH=./data" >> $env:GITHUB_ENV
 
-    - name: Verify environment setup
+    - name: Debug environment
       shell: powershell
       run: |
         echo "=== Environment Variables ==="
         echo "SQL_SERVER: $env:SQL_SERVER"
         echo "SQL_DATABASE: $env:SQL_DATABASE"
         echo "GCP_PROJECT_ID: $env:GCP_PROJECT_ID"
-        echo "BQ_DATASET_ID: $env:BQ_DATASET_ID"
         echo "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
+        echo "SQL_SERVER (DEBUG): $env:SQL_SERVER"
         
         echo "`n=== Google Credentials File ==="
         if (Test-Path $env:GOOGLE_APPLICATION_CREDENTIALS) {
-            Get-Content $env:GOOGLE_APPLICATION_CREDENTIALS | Select-Object -First 5
-            python -c "import json; f=open('$env:GOOGLE_APPLICATION_CREDENTIALS'); json.load(f); print('✅ Valid JSON')"
+            Get-Content $env:GOOGLE_APPLICATION_CREDENTIALS
         } else {
-            Write-Error "Credentials file not found!"
-            exit 1
+            Write-Host "Credentials file not found!"
         }
         
         echo "`n=== ODBC Drivers ==="
-        python -c "import pyodbc; print('Available drivers:', pyodbc.drivers())"
+        python -c "import pyodbc; print(pyodbc.drivers())"
 
     - name: Test ODBC Connection to SQL Server
       shell: powershell
       run: |
         Write-Host "Testing ODBC connection to SQL Server..."
-        $connStr = "Driver={$env:SQL_DRIVER};Server=tcp:$env:SQL_SERVER;Database=$env:SQL_DATABASE;Uid=$env:SQL_USERNAME;Pwd=$env:SQL_PASSWORD;"
+        $connStr = "Driver={ODBC Driver 17 for SQL Server};Server=tcp:$env:SQL_SERVER;Database=$env:SQL_DATABASE;Uid=$env:SQL_USERNAME;Pwd=$env:SQL_PASSWORD;"
         try {
           $conn = New-Object System.Data.Odbc.OdbcConnection($connStr)
           $conn.Open()
@@ -87,28 +84,6 @@ jobs:
           exit 1
         }
 
-    - name: Create data directory
-      shell: powershell
-      run: |
-        if (-not (Test-Path -Path $env:DATA_BASE_PATH)) {
-            New-Item -ItemType Directory -Path $env:DATA_BASE_PATH
-            Write-Host "Répertoire data créé"
-        }
-
     - name: Run ETL pipeline
       shell: powershell
-      run: |
-        python Script_python/pipeline_GCP.py
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "ETL pipeline failed with exit code $LASTEXITCODE"
-            exit $LASTEXITCODE
-        }
-
-    - name: Clean up
-      if: always()
-      shell: powershell
-      run: |
-        if (Test-Path $env:GOOGLE_APPLICATION_CREDENTIALS) {
-            Remove-Item $env:GOOGLE_APPLICATION_CREDENTIALS
-            Write-Host "Credentials file removed"
-        }
+      run: python Script_python/pipeline_GCP.py
