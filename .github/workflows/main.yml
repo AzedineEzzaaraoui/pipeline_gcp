@@ -24,17 +24,22 @@ jobs:
             Remove-Item msodbcsql.msi
         }
 
-    - name: Install Python dependencies from requirements.txt
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         
 
-    - name: Configure Google Cloud credentials
-      uses: google-github-actions/auth@v1
-      with:
-        credentials_json: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+    - name: Create credentials file
+      shell: powershell
+      run: |
+        # Crée le fichier credentials directement à partir du secret
+        $json = '${{ secrets.GOOGLE_CREDENTIALS_JSON }}'
+        $json | Out-File -FilePath "google-credentials.json" -Encoding utf8
+        # Définit la variable d'environnement
+        echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
 
-    - name: Set up environment variables
+    - name: Set up other environment variables
+      shell: powershell
       run: |
         echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" >> $env:GITHUB_ENV
         echo "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" >> $env:GITHUB_ENV
@@ -44,26 +49,26 @@ jobs:
         echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $env:GITHUB_ENV
         echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $env:GITHUB_ENV
         echo "DATA_BASE_PATH=./data" >> $env:GITHUB_ENV
-        echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
-      shell: powershell
-
-    - name: Create credentials file for direct use
-      run: |
-        ${{ secrets.GOOGLE_CREDENTIALS_JSON }} | Out-File -FilePath "google-credentials.json" -Encoding utf8
-      shell: powershell
 
     - name: Debug environment
+      shell: powershell
       run: |
+        echo "=== Environment Variables ==="
         echo "SQL_SERVER: $env:SQL_SERVER"
         echo "SQL_DATABASE: $env:SQL_DATABASE"
-        echo "SQL_DRIVER: $env:SQL_DRIVER"
-        echo "DATA_BASE_PATH: $env:DATA_BASE_PATH"
+        echo "GCP_PROJECT_ID: $env:GCP_PROJECT_ID"
         echo "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
-        Get-ChildItem -Path "$env:DATA_BASE_PATH" | ForEach-Object { Write-Host "✓ $_" }
-        python -c "import pyodbc; print('ODBC Drivers:', pyodbc.drivers())"
-        Get-Content google-credentials.json
-      shell: powershell
+        
+        echo "`n=== Google Credentials File ==="
+        if (Test-Path $env:GOOGLE_APPLICATION_CREDENTIALS) {
+            Get-Content $env:GOOGLE_APPLICATION_CREDENTIALS
+        } else {
+            Write-Host "Credentials file not found!"
+        }
+        
+        echo "`n=== ODBC Drivers ==="
+        python -c "import pyodbc; print(pyodbc.drivers())"
 
     - name: Run ETL pipeline
-      run: python Script_python/pipeline_GCP.py
       shell: powershell
+      run: python Script_python/pipeline_GCP.py
