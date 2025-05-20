@@ -1,18 +1,16 @@
-name: SQL Server to BigQuery Pipeline
 
+name: SQL Server to BigQuery Pipeline
 on:
   workflow_dispatch:  # Déclenchement manuel
   schedule:
-    - cron: '0 1 * * *'  # Tous les jours à 1h du matin
-
+    - cron: '0 1 * * *'  # Tous les jours à 1h du matin (Fixed cron syntax)
 jobs:
   etl_pipeline:
     runs-on: self-hosted  # Utilise ton runner auto-hébergé (sur ton PC)
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-
+      
     - name: Install ODBC Driver
       shell: powershell
       run: |
@@ -23,12 +21,12 @@ jobs:
             Start-Process msiexec.exe -Wait -ArgumentList '/i msodbcsql.msi /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES'
             Remove-Item msodbcsql.msi
         }
-
+        
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install pyodbc pandas google-cloud-bigquery pandas-gbq
         
-
     - name: Create credentials file
       shell: powershell
       run: |
@@ -37,7 +35,7 @@ jobs:
         $json | Out-File -FilePath "google-credentials.json" -Encoding utf8
         # Définit la variable d'environnement
         echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
-
+        
     - name: Set up environment variables
       shell: powershell
       run: |
@@ -49,75 +47,93 @@ jobs:
         echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $env:GITHUB_ENV
         echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $env:GITHUB_ENV
         echo "DATA_BASE_PATH=./data" >> $env:GITHUB_ENV
-        echo "ODBC_SYS_TRACE=1" >> $env:GITHUB_ENV  # Active le logging ODBC
-        echo "ODBC_SYS_TRACEFILE=C:\ODBC.log" >> $env:GITHUB_ENV  # Fichier de log
-
-    - name: Debug environment
-      shell: powershell
-      run: |
-        echo "=== Environment Variables ==="
-        echo "SQL_SERVER: $env:SQL_SERVER"
-        echo "SQL_DATABASE: $env:SQL_DATABASE"
-        echo "GCP_PROJECT_ID: $env:GCP_PROJECT_ID"
-        echo "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
-        
-        echo "`n=== Google Credentials File ==="
-        if (Test-Path $env:GOOGLE_APPLICATION_CREDENTIALS) {
-            Get-Content $env:GOOGLE_APPLICATION_CREDENTIALS
-        } else {
-            Write-Host "Credentials file not found!"
-        }
-        
-        echo "`n=== ODBC Drivers ==="
-        python -c "import pyodbc; print(pyodbc.drivers())"
+        echo "ODBC_SYS_TRACE=1" >> $env:GITHUB_ENV
+        echo "ODBC_SYS_TRACEFILE=$env:GITHUB_WORKSPACE\ODBC.log" >> $env:GITHUB_ENV
     
     - name: Test SQL Connection
       shell: powershell
       run: |
-       Write-Host "Testing SQL Server connection..."
-       $connectionString = "Driver={ODBC Driver 17 for SQL Server};Server=$env:SQL_SERVER;Database=$env:SQL_DATABASE;UID=$env:SQL_USERNAME;PWD=$env:SQL_PASSWORD;Encrypt=yes;TrustServerCertificate=yes;"
-    
-       try {
-        # Test connection
-        $conn = New-Object System.Data.Odbc.OdbcConnection
-        $conn.ConnectionString = $connectionString
-        $conn.Open()
-        Write-Host "Connection successful!"
-        $conn.Close()
-        } catch {
-        Write-Host "Connection failed: $_"
-        
-        # Check server reachability
-        Write-Host "Checking if server is reachable..."
-        
-        # Extract server name (remove any instance parts)
+        Write-Host "Testing SQL Server connection..."
         $serverName = $env:SQL_SERVER
+        Write-Host "Server name: $serverName"
+        
+        # Check if SQL Server is reachable
         if ($serverName -match '([^\\,]+)') {
-            $serverName = $matches[1]
-        }
-        
-        # Check if we can ping the server
-        if (Test-Connection -ComputerName $serverName -Count 1 -Quiet) {
-            Write-Host "Server $serverName is reachable via ping!"
-        } else {
-            Write-Host "Server $serverName is NOT reachable via ping."
-        }
-        
-        # Check if the port is open (default SQL port is 1433)
-        try {
-            $tcp = New-Object System.Net.Sockets.TcpClient
-            $tcp.ConnectAsync($serverName, 1433).Wait(3000) | Out-Null
-            if ($tcp.Connected) {
-                Write-Host "Port 1433 on $serverName is open!"
-            } else {
-                Write-Host "Port 1433 on $serverName is closed or filtered."
+            $baseServerName = $matches[1]
+            Write-Host "Base server name: $baseServerName"
+            
+            try {
+                # Test ping
+                if (Test-Connection -ComputerName $baseServerName -Count 1 -Quiet) {
+                    Write-Host "✅ Server is reachable via ping"
+                } else {
+                    Write-Host "❌ Server is NOT reachable via ping"
+                }
+            } catch {
+                Write-Host "❌ Ping test failed: $_"
             }
-            $tcp.Close()
-        } catch {
-            Write-Host "Error testing port 1433: $_"
-          }
         }
-
+        
+        # Try to connect using ODBC
+        try {
+            $connectionString = "Driver={ODBC Driver 17 for SQL Server};Server=$env:SQL_SERVER;Database=$env:SQL_DATABASE;UID=$env:SQL_USERNAME;PWD=$env:SQL_PASSWORD;Encrypt=yes;TrustServerCertificate=yes;Connection Timeout=30;"
+            
+            Write-Host "Trying ODBC connection..."
+            $conn = New-Object System.Data.Odbc.OdbcConnection
+            $conn.ConnectionString = $connectionString
+            $conn.Open()
+            Write-Host "✅ ODBC Connection successful!"
+            $conn.Close()
+        } catch {
+            Write-Host "❌ ODBC Connection failed: $_"
+        }
+        
+        # Try connecting with SQL client
+        try {
+            Write-Host "Trying SqlClient connection..."
+            $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
+            $sqlConnection.ConnectionString = "Server=$env:SQL_SERVER;Database=$env:SQL_DATABASE;User ID=$env:SQL_USERNAME;Password=$env:SQL_PASSWORD;Encrypt=True;TrustServerCertificate=True;Connection Timeout=30;"
+            $sqlConnection.Open()
+            Write-Host "✅ SqlClient Connection successful!"
+            $sqlConnection.Close()
+        } catch {
+            Write-Host "❌ SqlClient Connection failed: $_"
+        }
+        
+    - name: Debug environment
+      shell: powershell
+      run: |
+        Write-Host "=== Environment Variables ==="
+        Write-Host "SQL_SERVER: $env:SQL_SERVER"
+        Write-Host "SQL_DATABASE: $env:SQL_DATABASE"
+        Write-Host "GCP_PROJECT_ID: $env:GCP_PROJECT_ID"
+        Write-Host "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
+        
+        Write-Host "`n=== Python and ODBC Info ==="
+        python --version
+        python -c "import pyodbc; print('Available ODBC drivers:', pyodbc.drivers())"
+        
+        # Check TCP port connection
+        $server = $env:SQL_SERVER
+        if ($server -match '([^\\,]+)') {
+            $serverName = $matches[1]
+            $port = 1433
+            Write-Host "`nTesting connection to $serverName on port $port..."
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            try {
+                $tcpClient.Connect($serverName, $port)
+                if ($tcpClient.Connected) {
+                    Write-Host "✅ Successfully connected to port $port"
+                } else {
+                    Write-Host "❌ Failed to connect to port $port"
+                }
+            } catch {
+                Write-Host "❌ Error connecting to port $port: $_"
+            } finally {
+                $tcpClient.Close()
+            }
+        }
+        
     - name: Run ETL pipeline
       shell: powershell
       run: python Script_python/pipeline_GCP.py
