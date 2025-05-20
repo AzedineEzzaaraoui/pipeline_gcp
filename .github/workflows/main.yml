@@ -68,6 +68,21 @@ jobs:
         
         echo "`n=== ODBC Drivers ==="
         python -c "import pyodbc; print(pyodbc.drivers())"
+    - name: Test ODBC Connection to SQL Server
+      shell: powershell
+      run: |
+        Write-Host "Testing ODBC connection to SQL Server..."
+        $connStr = "Driver={ODBC Driver 17 for SQL Server};Server=tcp:$env:SQL_SERVER;Database=$env:SQL_DATABASE;Uid=$env:SQL_USERNAME;Pwd=$env:SQL_PASSWORD;"
+        try {
+          $conn = New-Object System.Data.Odbc.OdbcConnection($connStr)
+          $conn.Open()
+          Write-Host "✅ Connexion ODBC réussie à $env:SQL_SERVER"
+          $conn.Close()
+        } catch {
+          Write-Error "❌ Connexion ODBC échouée : $_"
+          exit 1
+        }
+
 
     - name: Run ETL pipeline
       shell: powershell
