@@ -62,54 +62,73 @@ jobs:
       - name: Modify connection string in pipeline script
         run: |
           import os
-          import re
 
           filename = 'Script_python/pipeline_GCP.py'
 
           with open(filename, 'r', encoding='utf-8') as file:
               content = file.read()
 
-          conn_func = '''def create_connection():
-              """Create a direct pyodbc connection using environment variables"""
-              try:
-                  server_name = os.getenv('SQL_SERVER')
-                  if '\\\\' in server_name:
-                      server_name = server_name.replace('\\\\', '\\')
+          # Au lieu d'utiliser regex pour remplacer, remplaçons la fonction complète
+          # par une recherche exacte
+          original_function = """def create_connection():
+    \"\"\"Create a direct pyodbc connection using environment variables\"\"\"
+    server_name = os.getenv('SQL_SERVER').replace('\\\\\\\\', '\\\\')
+    conn_str = (
+        f"DRIVER={{{os.getenv('SQL_DRIVER')}}};"
+        f"SERVER={server_name};"
+        f"DATABASE={os.getenv('SQL_DATABASE')};"
+        f"UID={os.getenv('SQL_USERNAME')};"
+        f"PWD={os.getenv('SQL_PASSWORD')};"
+        f"TrustServerCertificate=yes;"
+    )
+    return pyodbc.connect(conn_str)"""
 
-                  # Check for single backslash and handle properly
-                  if '\\' in server_name:
-                      # No need to do anything, Windows paths are fine with single backslash
-                      pass
+          new_function = """def create_connection():
+    \"\"\"Create a direct pyodbc connection using environment variables\"\"\"
+    try:
+        server_name = os.getenv('SQL_SERVER')
+        if '\\\\\\\\' in server_name:
+            server_name = server_name.replace('\\\\\\\\', '\\\\')
 
-                  print(f"Attempting to connect to: {server_name}")
-                  print(f"Using driver: {os.getenv('SQL_DRIVER')}")
-                  print(f"Database: {os.getenv('SQL_DATABASE')}")
+        print(f"Attempting to connect to: {server_name}")
+        print(f"Using driver: {os.getenv('SQL_DRIVER')}")
+        print(f"Database: {os.getenv('SQL_DATABASE')}")
 
-                  conn_str = (
-                      f"DRIVER={{{os.getenv('SQL_DRIVER')}}};"
-                      f"SERVER={server_name};"
-                      f"DATABASE={os.getenv('SQL_DATABASE')};"
-                      f"UID={os.getenv('SQL_USERNAME')};"
-                      f"PWD={os.getenv('SQL_PASSWORD')};"
-                      f"TrustServerCertificate=yes;"
-                  )
+        conn_str = (
+            f"DRIVER={{{os.getenv('SQL_DRIVER')}}};"
+            f"SERVER={server_name};"
+            f"DATABASE={os.getenv('SQL_DATABASE')};"
+            f"UID={os.getenv('SQL_USERNAME')};"
+            f"PWD={os.getenv('SQL_PASSWORD')};"
+            f"TrustServerCertificate=yes;"
+        )
 
-                  print(f"Connection string: {conn_str.replace(os.getenv('SQL_PASSWORD'), '********')}")
-                  import pyodbc
-                  return pyodbc.connect(conn_str)
-              except Exception as e:
-                  import logging
-                  logger = logging.getLogger(__name__)
-                  logger.error(f"Error creating connection: {str(e)}")
-                  logger.info("Available ODBC drivers:")
-                  import pyodbc
-                  for driver in pyodbc.drivers():
-                      logger.info(f"  - {driver}")
-                  raise
-          '''
+        print(f"Connection string: {conn_str.replace(os.getenv('SQL_PASSWORD'), '********')}")
+        return pyodbc.connect(conn_str)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating connection: {str(e)}")
+        logger.info("Available ODBC drivers:")
+        import pyodbc
+        for driver in pyodbc.drivers():
+            logger.info(f"  - {driver}")
+        raise"""
 
-          pattern = r"def create_connection\(\):.*?return pyodbc\.connect\(conn_str\)"
-          content = re.sub(pattern, conn_func, content, flags=re.DOTALL)
+          # Remplacer la fonction exacte
+          if original_function in content:
+              content = content.replace(original_function, new_function)
+              print("Function replaced successfully using exact match.")
+          else:
+              print("WARNING: Exact function match not found. Trying to replace directly.")
+              # Plan B: Remplacer directement toute la fonction dans le fichier
+              with open(filename, 'w', encoding='utf-8') as file:
+                  # Créer un nouveau contenu en remplaçant la fonction
+                  import re
+                  pattern = r"def create_connection\(\):[^}]*?return pyodbc\.connect\(conn_str\)"
+                  content = re.sub(pattern, new_function, content, flags=re.DOTALL)
+                  file.write(content)
+                  print("Attempted replacement with regex pattern.")
 
           if 'DATA_BASE_PATH' in os.environ:
               content = content.replace("base_path = './data'", "base_path = os.environ['DATA_BASE_PATH']")
@@ -121,6 +140,7 @@ jobs:
               file.write(content)
 
           print("Script updated successfully.")
+        shell: python
         shell: python
 
       - name: Debug environment
