@@ -58,6 +58,7 @@ jobs:
         echo "SQL_DATABASE: $env:SQL_DATABASE"
         echo "GCP_PROJECT_ID: $env:GCP_PROJECT_ID"
         echo "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
+        echo "SQL_SERVER (DEBUG): $env:SQL_SERVER"
         
         echo "`n=== Google Credentials File ==="
         if (Test-Path $env:GOOGLE_APPLICATION_CREDENTIALS) {
