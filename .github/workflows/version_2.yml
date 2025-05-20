@@ -1,0 +1,94 @@
+name:  BigQuery Pipeline
+
+on:
+  workflow_dispatch:  # Déclenchement manuel
+  schedule:
+    - cron: '0 1 * * *'  # Tous les jours à 1h du matin
+
+jobs:
+  etl_pipeline:
+    runs-on: self-hosted  # Utilise ton runner auto-hébergé (sur ton PC)
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install ODBC Driver
+      shell: powershell
+      run: |
+        $driverName = 'ODBC Driver 17 for SQL Server'
+        $installedDrivers = Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' -ErrorAction SilentlyContinue
+        if (-not ($installedDrivers.PSObject.Properties.Name -contains $driverName)) {
+            Write-Host "Installing $driverName..."
+            Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2202930' -OutFile 'msodbcsql.msi'
+            Start-Process msiexec.exe -Wait -ArgumentList '/i msodbcsql.msi /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES'
+            Remove-Item msodbcsql.msi
+        } else {
+            Write-Host "$driverName is already installed."
+        }
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyodbc google-cloud-bigquery
+
+    - name: Create credentials file
+      shell: powershell
+      run: |
+        $json = '${{ secrets.GOOGLE_CREDENTIALS_JSON }}'
+        # Supprimer les guillemets superflus (s'ils existent)
+        if ($json.StartsWith('"') -and $json.EndsWith('"')) {
+          $json = $json.Trim('"').Replace('\"','"')
+        }
+        $json | Out-File -FilePath "$env:GITHUB_WORKSPACE/google-credentials.json" -Encoding utf8
+        echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
+
+    - name: Set up other environment variables
+      shell: powershell
+      run: |
+        echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" >> $env:GITHUB_ENV
+        echo "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" >> $env:GITHUB_ENV
+        echo "SQL_USERNAME=${{ secrets.SQL_USERNAME }}" >> $env:GITHUB_ENV
+        echo "SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}" >> $env:GITHUB_ENV
+        echo "SQL_DRIVER=ODBC Driver 17 for SQL Server" >> $env:GITHUB_ENV
+        echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $env:GITHUB_ENV
+        echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $env:GITHUB_ENV
+        echo "DATA_BASE_PATH=./data" >> $env:GITHUB_ENV
+
+    - name: Debug environment
+      shell: powershell
+      run: |
+        Write-Host "=== Environment Variables ==="
+        Write-Host "SQL_SERVER: $env:SQL_SERVER"
+        Write-Host "SQL_DATABASE: $env:SQL_DATABASE"
+        Write-Host "GCP_PROJECT_ID: $env:GCP_PROJECT_ID"
+        Write-Host "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
+        
+        Write-Host "`n=== Google Credentials File ==="
+        if (Test-Path $env:GOOGLE_APPLICATION_CREDENTIALS) {
+            Get-Content $env:GOOGLE_APPLICATION_CREDENTIALS
+        } else {
+            Write-Host "Credentials file not found!"
+        }
+        
+        Write-Host "`n=== ODBC Drivers ==="
+        python -c "import pyodbc; print(pyodbc.drivers())"
+
+    - name: Test ODBC Connection to SQL Server
+      shell: powershell
+      run: |
+        Write-Host "Testing ODBC connection to SQL Server..."
+        $connStr = "Driver={ODBC Driver 17 for SQL Server};Server=tcp:$env:SQL_SERVER;Database=$env:SQL_DATABASE;Uid=$env:SQL_USERNAME;Pwd=$env:SQL_PASSWORD;"
+        try {
+          $conn = New-Object System.Data.Odbc.OdbcConnection($connStr)
+          $conn.Open()
+          Write-Host "✅ Connexion ODBC réussie à $env:SQL_SERVER"
+          $conn.Close()
+        } catch {
+          Write-Host "❌ Connexion ODBC échouée : $_"
+          exit 1
+        }
+
+    - name: Run ETL pipeline
+      shell: powershell
+      run: python Script_python/pipeline_GCP.py
