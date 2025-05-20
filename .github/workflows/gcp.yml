@@ -1,0 +1,9 @@
+- name: Create credentials file
+  shell: powershell
+  env:
+    GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+  run: |
+    $json = $Env:GOOGLE_CREDENTIALS_JSON
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    [System.IO.File]::WriteAllBytes("$Env:GITHUB_WORKSPACE/google-credentials.json", $bytes)
+    echo "GOOGLE_APPLICATION_CREDENTIALS=$Env:GITHUB_WORKSPACE/google-credentials.json" >> $Env:GITHUB_ENV
