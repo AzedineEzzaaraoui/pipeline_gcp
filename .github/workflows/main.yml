@@ -76,6 +76,11 @@ jobs:
                   if '\\\\' in server_name:
                       server_name = server_name.replace('\\\\', '\\')
 
+                  # Check for single backslash and handle properly
+                  if '\\' in server_name:
+                      # No need to do anything, Windows paths are fine with single backslash
+                      pass
+
                   print(f"Attempting to connect to: {server_name}")
                   print(f"Using driver: {os.getenv('SQL_DRIVER')}")
                   print(f"Database: {os.getenv('SQL_DATABASE')}")
