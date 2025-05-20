@@ -1,20 +1,21 @@
 name: SQL Server to BigQuery Pipeline
+
 on:
-  workflow_dispatch:  # Permet un déclenchement manuel
+  workflow_dispatch:  # Déclenchement manuel
   schedule:
-    - cron: '0 1 * * *'  # Exécution quotidienne à 1h du matin
+    - cron: '0 1 * * *'  # Tous les jours à 1h du matin
+
 jobs:
   etl_pipeline:
-    runs-on: self-hosted  # Utilise un runner auto-hébergé
-    
+    runs-on: self-hosted  # Utilise ton runner auto-hébergé (sur ton PC)
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      
+
     - name: Install ODBC Driver
       shell: powershell
       run: |
-        # Vérifie si le driver est déjà installé
         $driverName = 'ODBC Driver 17 for SQL Server'
         if (-not (Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' -Name $driverName -ErrorAction SilentlyContinue)) {
             Write-Host "Installing $driverName..."
@@ -22,29 +23,28 @@ jobs:
             Start-Process msiexec.exe -Wait -ArgumentList '/i msodbcsql.msi /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES'
             Remove-Item msodbcsql.msi
         }
-        Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' | Format-List
-        
-    - name: Set up Python
+
+    - name: Set up Python 3.12
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-        
-    - name: Install Python dependencies
+        python-version: '3.12'
+
+    - name: Install Python dependencies from requirements.txt
       run: |
         python -m pip install --upgrade pip
-        pip install pandas pyodbc google-cloud-bigquery python-dotenv sqlalchemy
-        
+        pip install -r requirements.txt
+
     - name: Configure Google Cloud credentials
       uses: google-github-actions/auth@v1
       with:
         credentials_json: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-        
+
     - name: Create credentials file for direct use
       run: |
         echo ${{ secrets.GOOGLE_CREDENTIALS_JSON }} > google-credentials.json
         echo "GOOGLE_APPLICATION_CREDENTIALS=$PWD/google-credentials.json" >> $env:GITHUB_ENV
       shell: powershell
-      
+
     - name: Set up environment variables
       run: |
         echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" >> $env:GITHUB_ENV
@@ -56,24 +56,18 @@ jobs:
         echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $env:GITHUB_ENV
         echo "DATA_BASE_PATH=./data" >> $env:GITHUB_ENV
       shell: powershell
-      
+
     - name: Debug environment
       run: |
-        echo "Environment variables:"
         echo "SQL_SERVER: $env:SQL_SERVER"
         echo "SQL_DATABASE: $env:SQL_DATABASE"
         echo "SQL_DRIVER: $env:SQL_DRIVER"
         echo "DATA_BASE_PATH: $env:DATA_BASE_PATH"
         echo "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
-        echo "Vérification des fichiers CSV:"
-        if (Test-Path "$env:DATA_BASE_PATH\produit.csv") { echo "✓ produit.csv existe" } else { echo "❌ produit.csv manquant" }
-        if (Test-Path "$env:DATA_BASE_PATH\entrepots.csv") { echo "✓ entrepots.csv existe" } else { echo "❌ entrepots.csv manquant" }
-        if (Test-Path "$env:DATA_BASE_PATH\commandes.csv") { echo "✓ commandes.csv existe" } else { echo "❌ commandes.csv manquant" }
-        if (Test-Path "$env:DATA_BASE_PATH\livrasion.csv") { echo "✓ livrasion.csv existe" } else { echo "❌ livrasion.csv manquant" }
-        if (Test-Path "$env:DATA_BASE_PATH\mouvements.csv") { echo "✓ mouvements.csv existe" } else { echo "❌ mouvements.csv manquant" }
-        python -c "import pyodbc; print('Available ODBC drivers:', pyodbc.drivers())"
+        Get-ChildItem -Path "$env:DATA_BASE_PATH" | ForEach-Object { Write-Host "✓ $_" }
+        python -c "import pyodbc; print('ODBC Drivers:', pyodbc.drivers())"
       shell: powershell
-      
+
     - name: Run ETL pipeline
       run: python Script_python/pipeline_GCP.py
       shell: powershell
