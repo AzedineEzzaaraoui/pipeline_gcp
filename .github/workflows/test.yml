@@ -9,16 +9,16 @@ jobs:
 
     steps:
       - name: Setup environment variables
+        shell: powershell
         run: |
-          echo "SQL_DRIVER=ODBC Driver 17 for SQL Server" >> $GITHUB_ENV
-          echo "SQL_SERVER=127.0.0.1,1433" >> $GITHUB_ENV
-          echo "SQL_DATABASE=Fact_Commandes" >> $GITHUB_ENV
-          echo "SQL_USERNAME=aze" >> $GITHUB_ENV
-          echo "SQL_PASSWORD=aze" >> $GITHUB_ENV
-        shell: pwsh
+          Add-Content -Path $Env:GITHUB_ENV -Value "SQL_DRIVER=ODBC Driver 17 for SQL Server"
+          Add-Content -Path $Env:GITHUB_ENV -Value "SQL_SERVER=127.0.0.1,1433"
+          Add-Content -Path $Env:GITHUB_ENV -Value "SQL_DATABASE=Fact_Commandes"
+          Add-Content -Path $Env:GITHUB_ENV -Value "SQL_USERNAME=aze"
+          Add-Content -Path $Env:GITHUB_ENV -Value "SQL_PASSWORD=aze"
 
       - name: Test ODBC connection with PowerShell
-        shell: pwsh
+        shell: powershell
         run: |
           $connStr = "Driver={$env:SQL_DRIVER};Server=$env:SQL_SERVER;Database=$env:SQL_DATABASE;Uid=$env:SQL_USERNAME;Pwd=$env:SQL_PASSWORD;"
           Write-Host "🔄 Tentative de connexion ODBC à SQL Server..."
