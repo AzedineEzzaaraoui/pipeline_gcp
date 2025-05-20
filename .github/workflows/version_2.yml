@@ -1,4 +1,4 @@
-name:  BigQuery Pipeline
+name: BigQuery Pipeline
 
 on:
   workflow_dispatch:  # Déclenchement manuel
@@ -28,15 +28,19 @@ jobs:
         }
 
     - name: Install Python dependencies
+      shell: powershell
       run: |
-        python -m pip install --upgrade setuptools wheel || exit 0
-        pip install pyodbc google-cloud-bigquery
+        try {
+          python -m pip install --upgrade setuptools wheel
+        } catch {
+          Write-Host "Upgrade setuptools/wheel failed but continuing"
+        }
+        python -m pip install pyodbc google-cloud-bigquery
 
     - name: Create credentials file
       shell: powershell
       run: |
         $json = '${{ secrets.GOOGLE_CREDENTIALS_JSON }}'
-        # Supprimer les guillemets superflus (s'ils existent)
         if ($json.StartsWith('"') -and $json.EndsWith('"')) {
           $json = $json.Trim('"').Replace('\"','"')
         }
