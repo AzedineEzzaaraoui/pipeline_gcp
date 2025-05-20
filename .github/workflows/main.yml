@@ -35,7 +35,7 @@ jobs:
       uses: google-github-actions/auth@v1
       with:
         credentials_json: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-
+        
     - name: Create credentials file for direct use
       run: |
         echo ${{ secrets.GOOGLE_CREDENTIALS_JSON }} > google-credentials.json
