@@ -1,0 +1,33 @@
+name: Test SQL Server ODBC Connection
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test_odbc_connection:
+    runs-on: self-hosted
+
+    steps:
+      - name: Setup environment variables
+        run: |
+          echo "SQL_DRIVER=ODBC Driver 17 for SQL Server" >> $GITHUB_ENV
+          echo "SQL_SERVER=127.0.0.1,1433" >> $GITHUB_ENV
+          echo "SQL_DATABASE=Fact_Commandes" >> $GITHUB_ENV
+          echo "SQL_USERNAME=aze" >> $GITHUB_ENV
+          echo "SQL_PASSWORD=aze" >> $GITHUB_ENV
+        shell: pwsh
+
+      - name: Test ODBC connection with PowerShell
+        shell: pwsh
+        run: |
+          $connStr = "Driver={$env:SQL_DRIVER};Server=$env:SQL_SERVER;Database=$env:SQL_DATABASE;Uid=$env:SQL_USERNAME;Pwd=$env:SQL_PASSWORD;"
+          Write-Host "🔄 Tentative de connexion ODBC à SQL Server..."
+          try {
+            $conn = New-Object System.Data.Odbc.OdbcConnection($connStr)
+            $conn.Open()
+            Write-Host "✅ Connexion ODBC réussie à $env:SQL_SERVER vers la base $env:SQL_DATABASE"
+            $conn.Close()
+          } catch {
+            Write-Error "❌ Connexion ODBC échouée : $_"
+            exit 1
+          }
