@@ -38,7 +38,7 @@ jobs:
         # Définit la variable d'environnement
         echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
 
-    - name: Set up other environment variables
+    - name: Set up environment variables
       shell: powershell
       run: |
         echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" >> $env:GITHUB_ENV
@@ -49,6 +49,8 @@ jobs:
         echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $env:GITHUB_ENV
         echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" >> $env:GITHUB_ENV
         echo "DATA_BASE_PATH=./data" >> $env:GITHUB_ENV
+        echo "ODBC_SYS_TRACE=1" >> $env:GITHUB_ENV  # Active le logging ODBC
+        echo "ODBC_SYS_TRACEFILE=C:\ODBC.log" >> $env:GITHUB_ENV  # Fichier de log
 
     - name: Debug environment
       shell: powershell
