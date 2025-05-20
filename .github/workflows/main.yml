@@ -27,15 +27,13 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-     
 
     - name: Create credentials file
       shell: powershell
       run: |
-        # Crée le fichier credentials directement à partir du secret
         $json = '${{ secrets.GOOGLE_CREDENTIALS_JSON }}'
-        $json | Out-File -FilePath "google-credentials.json" -Encoding utf8
-        # Définit la variable d'environnement
+        # Écrire le fichier JSON sans BOM
+        [System.IO.File]::WriteAllText("google-credentials.json", $json, [System.Text.Encoding]::UTF8)
         echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
 
     - name: Set up other environment variables
@@ -58,7 +56,6 @@ jobs:
         echo "SQL_DATABASE: $env:SQL_DATABASE"
         echo "GCP_PROJECT_ID: $env:GCP_PROJECT_ID"
         echo "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
-        echo "SQL_SERVER (DEBUG): $env:SQL_SERVER"
         
         echo "`n=== Google Credentials File ==="
         if (Test-Path $env:GOOGLE_APPLICATION_CREDENTIALS) {
@@ -69,6 +66,7 @@ jobs:
         
         echo "`n=== ODBC Drivers ==="
         python -c "import pyodbc; print(pyodbc.drivers())"
+
     - name: Test ODBC Connection to SQL Server
       shell: powershell
       run: |
@@ -83,7 +81,6 @@ jobs:
           Write-Error "❌ Connexion ODBC échouée : $_"
           exit 1
         }
-
 
     - name: Run ETL pipeline
       shell: powershell
