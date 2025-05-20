@@ -31,11 +31,11 @@ jobs:
     - name: Create credentials file
       shell: powershell
       run: |
-        # Crée le fichier credentials en UTF-8 sans BOM
         $json = '${{ secrets.GOOGLE_CREDENTIALS_JSON }}'
-        [System.IO.File]::WriteAllText("$env:GITHUB_WORKSPACE/google-credentials.json", $json, [System.Text.Encoding]::UTF8)
-        # Définit la variable d'environnement
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+        [System.IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE/google-credentials.json", $bytes)
         echo "GOOGLE_APPLICATION_CREDENTIALS=$env:GITHUB_WORKSPACE/google-credentials.json" >> $env:GITHUB_ENV
+
 
     - name: Set up other environment variables
       shell: powershell
