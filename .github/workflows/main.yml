@@ -1,4 +1,4 @@
-name: SQL Server to BigQuery Pipeline
+name: SQL Server to BigQuery Pipelin
 
 on:
   schedule:
