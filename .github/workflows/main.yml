@@ -70,6 +70,53 @@ jobs:
         
         echo "`n=== ODBC Drivers ==="
         python -c "import pyodbc; print(pyodbc.drivers())"
+    
+    - name: Test SQL Connection
+      shell: powershell
+      run: |
+       Write-Host "Testing SQL Server connection..."
+       $connectionString = "Driver={ODBC Driver 17 for SQL Server};Server=$env:SQL_SERVER;Database=$env:SQL_DATABASE;UID=$env:SQL_USERNAME;PWD=$env:SQL_PASSWORD;Encrypt=yes;TrustServerCertificate=yes;"
+    
+       try {
+        # Test connection
+        $conn = New-Object System.Data.Odbc.OdbcConnection
+        $conn.ConnectionString = $connectionString
+        $conn.Open()
+        Write-Host "Connection successful!"
+        $conn.Close()
+        } catch {
+        Write-Host "Connection failed: $_"
+        
+        # Check server reachability
+        Write-Host "Checking if server is reachable..."
+        
+        # Extract server name (remove any instance parts)
+        $serverName = $env:SQL_SERVER
+        if ($serverName -match '([^\\,]+)') {
+            $serverName = $matches[1]
+        }
+        
+        # Check if we can ping the server
+        if (Test-Connection -ComputerName $serverName -Count 1 -Quiet) {
+            Write-Host "Server $serverName is reachable via ping!"
+        } else {
+            Write-Host "Server $serverName is NOT reachable via ping."
+        }
+        
+        # Check if the port is open (default SQL port is 1433)
+        try {
+            $tcp = New-Object System.Net.Sockets.TcpClient
+            $tcp.ConnectAsync($serverName, 1433).Wait(3000) | Out-Null
+            if ($tcp.Connected) {
+                Write-Host "Port 1433 on $serverName is open!"
+            } else {
+                Write-Host "Port 1433 on $serverName is closed or filtered."
+            }
+            $tcp.Close()
+        } catch {
+            Write-Host "Error testing port 1433: $_"
+          }
+        }
 
     - name: Run ETL pipeline
       shell: powershell
