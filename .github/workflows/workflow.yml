@@ -1,0 +1,169 @@
+name: SQL Server to BigQuery Pipeline
+
+on:
+  schedule:
+    - cron: '0 1 * * *'   # Tous les jours à 1h du matin
+  workflow_dispatch:      # Possibilité de lancer manuellement
+
+jobs:
+  etl_pipeline:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Fix pip and install dependencies
+        run: |
+          python -m ensurepip --upgrade || echo "Ensurepip failed, trying alternative method"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+        shell: cmd
+
+      - name: Check and Install ODBC Driver for SQL Server if needed
+        shell: powershell
+        run: |
+          $driverName = 'ODBC Driver 17 for SQL Server'
+          $drivers = Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' -ErrorAction SilentlyContinue
+          if ($drivers.'ODBC Driver 17 for SQL Server') {
+            Write-Host "$driverName is already installed."
+          } else {
+            Write-Host "$driverName not found. Installation required."
+            # Décommentez les lignes suivantes si le runner a accès à Internet pour télécharger et installer automatiquement
+            # Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2202930' -OutFile 'msodbcsql.msi'
+            # Start-Process msiexec.exe -Wait -ArgumentList '/i msodbcsql.msi /quiet /norestart IACCEPTMSODBCSQLLICENSETERMS=YES'
+            Write-Host "Veuillez installer manuellement le driver ODBC SQL Server sur le runner."
+            exit 1
+          }
+
+      - name: Configure Google Cloud credentials
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
+      - name: Set up environment variables
+        run: |
+          echo "SQL_SERVER=${{ secrets.SQL_SERVER }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "SQL_DATABASE=${{ secrets.SQL_DATABASE }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "SQL_USERNAME=${{ secrets.SQL_USERNAME }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "SQL_DRIVER=ODBC Driver 17 for SQL Server" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "DATA_BASE_PATH=./data" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "GOOGLE_APPLICATION_CREDENTIALS=%CD%\gcp-credentials.json" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        shell: powershell
+
+      - name: Create credentials file
+        run: |
+          $creds = '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+          $creds | Out-File -Encoding utf8 gcp-credentials.json
+        shell: powershell
+
+      - name: Modify connection string in pipeline script
+        run: |
+          import os
+
+          filename = 'Script_python/pipeline_GCP.py'
+
+          with open(filename, 'r', encoding='utf-8') as file:
+              content = file.read()
+
+          # Au lieu d'utiliser regex pour remplacer, remplaçons la fonction complète
+          # par une recherche exacte
+          original_function = """def create_connection():
+    \"\"\"Create a direct pyodbc connection using environment variables\"\"\"
+    server_name = os.getenv('SQL_SERVER').replace('\\\\\\\\', '\\\\')
+    conn_str = (
+        f"DRIVER={{{os.getenv('SQL_DRIVER')}}};"
+        f"SERVER={server_name};"
+        f"DATABASE={os.getenv('SQL_DATABASE')};"
+        f"UID={os.getenv('SQL_USERNAME')};"
+        f"PWD={os.getenv('SQL_PASSWORD')};"
+        f"TrustServerCertificate=yes;"
+    )
+    return pyodbc.connect(conn_str)"""
+
+          new_function = """def create_connection():
+    \"\"\"Create a direct pyodbc connection using environment variables\"\"\"
+    try:
+        server_name = os.getenv('SQL_SERVER')
+        if '\\\\\\\\' in server_name:
+            server_name = server_name.replace('\\\\\\\\', '\\\\')
+
+        print(f"Attempting to connect to: {server_name}")
+        print(f"Using driver: {os.getenv('SQL_DRIVER')}")
+        print(f"Database: {os.getenv('SQL_DATABASE')}")
+
+        conn_str = (
+            f"DRIVER={{{os.getenv('SQL_DRIVER')}}};"
+            f"SERVER={server_name};"
+            f"DATABASE={os.getenv('SQL_DATABASE')};"
+            f"UID={os.getenv('SQL_USERNAME')};"
+            f"PWD={os.getenv('SQL_PASSWORD')};"
+            f"TrustServerCertificate=yes;"
+        )
+
+        print(f"Connection string: {conn_str.replace(os.getenv('SQL_PASSWORD'), '********')}")
+        return pyodbc.connect(conn_str)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating connection: {str(e)}")
+        logger.info("Available ODBC drivers:")
+        import pyodbc
+        for driver in pyodbc.drivers():
+            logger.info(f"  - {driver}")
+        raise"""
+
+          # Remplacer la fonction exacte
+          if original_function in content:
+              content = content.replace(original_function, new_function)
+              print("Function replaced successfully using exact match.")
+          else:
+              print("WARNING: Exact function match not found. Trying to replace directly.")
+              # Plan B: Remplacer directement toute la fonction dans le fichier
+              with open(filename, 'w', encoding='utf-8') as file:
+                  # Créer un nouveau contenu en remplaçant la fonction
+                  import re
+                  pattern = r"def create_connection\(\):[^}]*?return pyodbc\.connect\(conn_str\)"
+                  content = re.sub(pattern, new_function, content, flags=re.DOTALL)
+                  file.write(content)
+                  print("Attempted replacement with regex pattern.")
+
+          if 'DATA_BASE_PATH' in os.environ:
+              content = content.replace("base_path = './data'", "base_path = os.environ['DATA_BASE_PATH']")
+              content = content.replace("base_path = './data '", "base_path = os.environ['DATA_BASE_PATH']")
+              content = content.replace('base_path = "./data"', "base_path = os.environ['DATA_BASE_PATH']")
+              content = content.replace('base_path = "./data "', "base_path = os.environ['DATA_BASE_PATH']")
+
+          with open(filename, 'w', encoding='utf-8') as file:
+              file.write(content)
+
+          print("Script updated successfully.")
+        shell: python
+        shell: python
+
+      - name: Debug environment
+        run: |
+          echo "Current directory: %CD%"
+          dir
+          dir data
+          echo "Checking environment variables:"
+          echo SQL_SERVER=%SQL_SERVER%
+          echo SQL_DATABASE=%SQL_DATABASE%
+          echo SQL_DRIVER=%SQL_DRIVER%
+          echo DATA_BASE_PATH=%DATA_BASE_PATH%
+          echo GCP_PROJECT_ID=%GCP_PROJECT_ID%
+          echo BQ_DATASET_ID=%BQ_DATASET_ID%
+
+          echo "ODBC Drivers installed:"
+          powershell -Command "Get-ItemProperty 'HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers' 2>$null | Format-List"
+        shell: cmd
+
+      - name: Run ETL pipeline
+        run: python Script_python/pipeline_GCP.py
+        shell: cmd
+
+      - name: Run tests
+        run: python Script_python/pytest.py
+        shell: cmd
