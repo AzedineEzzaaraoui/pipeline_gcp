@@ -50,7 +50,7 @@ jobs:
           echo GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} >> $env:GITHUB_ENV
           echo BQ_DATASET_ID=${{ secrets.BQ_DATASET_ID }} >> $env:GITHUB_ENV
           echo DATA_BASE_PATH=./data >> $env:GITHUB_ENV
-          echo GOOGLE_APPLICATION_CREDENTIALS=%CD%\gcp-credentials.json >> $env:GITHUB_ENV
+          echo "GOOGLE_APPLICATION_CREDENTIALS=%CD%\gcp-credentials.json" >> $env:GITHUB_ENV
         shell: powershell
 
       - name: Create credentials file
