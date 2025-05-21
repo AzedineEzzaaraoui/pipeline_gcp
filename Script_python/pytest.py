@@ -1,7 +1,10 @@
 
-from datetime import date
+from pipeline_GCP import *
 
-%run ./pipeline_GCP.ipynb
+from datetime import date
+from dotenv import load_dotenv
+load_dotenv()
+
 
 def test_transformation_df():
     
@@ -26,11 +29,8 @@ def create_sql_engine():
     # Charger les variables d'environnement si ce n'est pas déjà fait
     load_dotenv()
     
-    # Utiliser la même approche que celle qui fonctionne avec pyodbc
     server_name = os.getenv('SQL_SERVER').replace('\\\\', '\\')
-    
-    # Construction de la chaîne de connexion ODBC exactement comme dans votre exemple fonctionnel
-    odbc_conn_str = (
+    conn_str = (
         f"DRIVER={{{os.getenv('SQL_DRIVER')}}};"
         f"SERVER={server_name};"
         f"DATABASE={os.getenv('SQL_DATABASE')};"
@@ -38,16 +38,7 @@ def create_sql_engine():
         f"PWD={os.getenv('SQL_PASSWORD')};"
         f"TrustServerCertificate=yes;"
     )
-    
-    # Utilisation de la notation pyodbc:// avec la chaîne encodée
-    conn_str = f"mssql+pyodbc:///?odbc_connect={urllib.parse.quote_plus(odbc_conn_str)}"
-    
-    # Création du moteur SQLAlchemy avec des paramètres optimisés
-    return create_engine(
-        conn_str, 
-        fast_executemany=True,  # Optimisation pour les insertions multiples
-        pool_pre_ping=True      # Vérifie que la connexion est toujours active
-    )
+    return pyodbc.connect(conn_str)
 
 
 def test_sql_server_integration():
@@ -80,27 +71,30 @@ def test_sql_server_integration():
 
 def test_bigquery_integration():
     """Teste que les données sont bien stockées dans BigQuery"""
-
-    credential_path = r"C:\Users\user\Pipeline_09_05_2025\credential_path\bigquery_credentials.json"
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset_id = os.getenv("BQ_DATASET_ID")
+    ##credential_path = r"C:\Users\user\Pipeline_09_05_2025\credential_path\bigquery_credentials.json"
     credentials = service_account.Credentials.from_service_account_file(
-    credential_path,
-    scopes=["https://www.googleapis.com/auth/cloud-platform"],)
-    client = bigquery.Client(credentials=credentials, project="pipeline-458019")
+            os.getenv('GOOGLE_APPLICATION_CREDENTIALS'),
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+    client = bigquery.Client(credentials=credentials, project=project_id)    
     
     
+   
 
     tables_to_check = {
-        "FACT_Mouvement": "vente",
-        "FACT_Livraison": "vente",
-        "FACT_commandes": "vente" ,
-         "dim_produit" :"vente" ,
-         "dim_entrepot" :"vente"
+        "fact_mouvement": dataset_id,
+        "fact_livraison": dataset_id,
+        "fact_commandes": dataset_id ,
+         "dim_produit" :dataset_id ,
+         "dim_entrepot" :dataset_id
     }
     
     # 3. Vérification de chaque table
     for table, dataset in tables_to_check.items():
         try:
-            query = f"SELECT * FROM `pipeline-458019.{dataset}.{table}` LIMIT 1"
+            query = f"SELECT * FROM `{project_id}.{dataset}.{table}` LIMIT 1"
             df = client.query(query).to_dataframe()
             assert not df.empty, f"La table {table} est vide"
             logger.info(f"✅ Table BigQuery {dataset}.{table} contient des données")
@@ -113,7 +107,11 @@ def test_bigquery_integration():
 def main():
     test_transformation_df()
     test_sql_server_integration()
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset_id = os.getenv("BQ_DATASET_ID")
     test_bigquery_integration()
-
+    
 if __name__ == "__main__" :
     main()
+    
+    
